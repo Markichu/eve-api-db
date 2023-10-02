@@ -18,6 +18,7 @@ CREATE TABLE market.orders (
     duration INT NOT NULL
 );
 
+-- SDE schema, for storing data related to the static data export
 CREATE SCHEMA IF NOT EXISTS sde;
 
 DROP TABLE IF EXISTS sde.type_materials;
@@ -39,4 +40,18 @@ CREATE TABLE sde.type_ids (
     volume DECIMAL(100,2),
     portion_size INT NOT NULL
 );
+
+-- DB management schema, for storing data related to the management of data in the database
+CREATE SCHEMA IF NOT EXISTS db_management;
+
+DROP TABLE IF EXISTS db_management.last_updated;
+
+CREATE TABLE db_management.last_updated (
+    task_name VARCHAR(100) NOT NULL,
+    task_params VARCHAR(100) NOT NULL,
+    last_updated TIMESTAMP NOT NULL,
+    expiry TIMESTAMP NOT NULL
+);
+
+ALTER TABLE db_management.last_updated ADD CONSTRAINT last_updated_pk PRIMARY KEY (task_name, task_params);
 

@@ -11,6 +11,8 @@ anyio==3.7.1
     #   fastapi
     #   starlette
     #   watchfiles
+asyncpg==0.28.0
+    # via -r .\requirements.in
 certifi==2023.7.22
     # via requests
 cffi==1.16.0
@@ -41,8 +43,6 @@ idna==3.4
     # via
     #   anyio
     #   requests
-psycopg2-binary==2.9.8
-    # via -r .\requirements.in
 pycparser==2.21
     # via cffi
 pydantic==2.4.2
