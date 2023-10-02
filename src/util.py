@@ -1,7 +1,7 @@
-import psycopg2
+import asyncpg
 
-def connect_to_db():
-    conn = psycopg2.connect(
+async def connect_to_db() -> asyncpg.connection.Connection:
+    conn = await asyncpg.connect(
         host="localhost",
         database="eve",
         user="postgres",

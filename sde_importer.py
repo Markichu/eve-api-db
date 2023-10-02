@@ -1,7 +1,7 @@
 import yaml
 
 from psycopg2 import sql, extensions
-from utils import connect_to_db
+from src.util import connect_to_db
 
 SDE_LOCATION = "./sde"
 
