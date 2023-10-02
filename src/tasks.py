@@ -5,6 +5,7 @@ import datetime
 from src.util import connect_to_db
 
 async def update_market_orders(args: str) -> bool:
+    print(f"Updating orders for region {args}.")
     region_id = int(args)
     
     url = f"https://esi.evetech.net/latest/markets/{region_id}/orders/"
@@ -46,4 +47,5 @@ async def update_market_orders(args: str) -> bool:
     await conn.copy_records_to_table("orders", records=orders, schema_name="market")
     await conn.close()
     
+    print(f"Updated {len(orders)} orders for region {args}.")
     return {"successful": True, "expiry": datetime.datetime.strptime(response.headers["expires"], '%a, %d %b %Y %H:%M:%S %Z')}
