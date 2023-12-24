@@ -18,27 +18,137 @@ CREATE TABLE market.orders (
     duration INT NOT NULL
 );
 
+DROP TABLE IF EXISTS market.history;
+
+CREATE TABLE market.history (
+    type_id INT NOT NULL,
+    date TIMESTAMP NOT NULL,
+    highest DECIMAL(20,2) NOT NULL,
+    lowest DECIMAL(20,2) NOT NULL,
+    average DECIMAL(20,2) NOT NULL,
+    volume BIGINT NOT NULL,
+    order_count INT NOT NULL,
+    PRIMARY KEY (type_id, date)
+);
+
+DROP TABLE IF EXISTS market.aggregates;
+
+CREATE TABLE market.aggregates (
+    location_id BIGINT NOT NULL,
+    type_id INT NOT NULL,
+    sell_min DECIMAL(20,2),
+    buy_max DECIMAL(20,2),
+    sell_volume BIGINT NOT NULL,
+    buy_volume BIGINT NOT NULL,
+    sell_orders INT NOT NULL,
+    buy_orders INT NOT NULL,
+    region_id BIGINT NOT NULL,
+    PRIMARY KEY (location_id, type_id)
+);
+
+DROP TABLE IF EXISTS market.reprocess;
+
+CREATE TABLE market.reprocess (
+    type_id INT NOT NULL PRIMARY KEY,
+    reprocess_value DECIMAL(22,4) NOT NULL
+);
+
+DROP TABLE IF EXISTS market.manufacture;
+
+CREATE TABLE market.manufacture (
+    type_id INT NOT NULL PRIMARY KEY,
+    manufacture_value DECIMAL(22,4) NOT NULL
+);
+
 -- SDE schema, for storing data related to the static data export
 CREATE SCHEMA IF NOT EXISTS sde;
 
-DROP TABLE IF EXISTS sde.type_materials;
+DROP TABLE IF EXISTS sde.blueprints;
 
-CREATE TABLE sde.type_materials (
-    type_id INT NOT NULL,
+CREATE TABLE sde.blueprints (
+    blueprint_type_id INT PRIMARY KEY,
+    max_production_limit INT NOT NULL,
+    copying_time INT,
+    invention_time INT,
+    manufacturing_time INT,
+    research_material_time INT,
+    research_time_time INT,
+    reaction_time INT
+);
+
+DROP TABLE IF EXISTS sde.blueprint_materials;
+
+CREATE TABLE sde.blueprint_materials (
+    blueprint_type_id INT NOT NULL,
+    activity VARCHAR(32) NOT NULL,
     material_type_id INT NOT NULL,
-    quantity INT NOT NULL
+    quantity INT NOT NULL,
+    PRIMARY KEY (blueprint_type_id, activity, material_type_id)
+);
+
+DROP TABLE IF EXISTS sde.blueprint_products;
+
+CREATE TABLE sde.blueprint_products (
+    blueprint_type_id INT NOT NULL,
+    activity VARCHAR(32) NOT NULL,
+    product_type_id INT NOT NULL,
+    quantity INT NOT NULL,
+    probability DECIMAL(10,2),
+    PRIMARY KEY (blueprint_type_id, activity, product_type_id)
+);
+
+DROP TABLE IF EXISTS sde.blueprint_skills;
+
+CREATE TABLE sde.blueprint_skills (
+    blueprint_type_id INT NOT NULL,
+    activity VARCHAR(32) NOT NULL,
+    skill_type_id INT NOT NULL,
+    level INT NOT NULL,
+    PRIMARY KEY (blueprint_type_id, activity, skill_type_id)
+);
+
+DROP TABLE IF EXISTS sde.market_groups;
+
+CREATE TABLE sde.market_groups (
+    market_group_id INT PRIMARY KEY,
+    has_types BOOLEAN NOT NULL,
+    icon_id INT,
+    name_id VARCHAR(100) NOT NULL,
+    parent_group_id INT
 );
 
 DROP TABLE IF EXISTS sde.type_ids;
 
 CREATE TABLE sde.type_ids (
     type_id INT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    published BOOLEAN NOT NULL,
     base_price DECIMAL(100,2),
+    capacity DECIMAL(100,2),
+    faction_id INT,
+    graphic_id INT,
+    group_id INT NOT NULL,
+    icon_id INT,
+    market_group_id INT,
     mass DECIMAL(100,2),
-    volume DECIMAL(100,2),
-    portion_size INT NOT NULL
+    meta_group_id INT,
+    name VARCHAR(100) NOT NULL,
+    portion_size INT NOT NULL,
+    published BOOLEAN NOT NULL,
+    race_id INT,
+    radius DECIMAL(100,2),
+    sof_faction_name VARCHAR(100),
+    sof_material_set_id INT,
+    variation_parent_type_id INT,
+    sound_id INT,
+    volume DECIMAL(100,2)
+);
+
+DROP TABLE IF EXISTS sde.type_materials;
+
+CREATE TABLE sde.type_materials (
+    type_id INT NOT NULL,
+    material_type_id INT NOT NULL,
+    quantity INT NOT NULL,
+    PRIMARY KEY (type_id, material_type_id)
 );
 
 -- DB management schema, for storing data related to the management of data in the database
