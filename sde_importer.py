@@ -100,6 +100,8 @@ async def import_blueprints(conn: asyncpg.connection.Connection):
         ]
         for skill in duplicate_skills:
             sde_skills.remove(skill)
+            
+        # ENDTODO
 
         await conn.execute("TRUNCATE TABLE sde.blueprints")
         await conn.copy_records_to_table("blueprints", records=sde_blueprints, schema_name="sde")
@@ -200,10 +202,10 @@ async def import_type_materials(conn: asyncpg.connection.Connection):
 async def main():
     conn = await connect_to_db()
 
-    # await import_blueprints(conn)
+    await import_blueprints(conn)
     await import_market_groups(conn)
-    # await import_type_ids(conn)
-    # await import_type_materials(conn)
+    await import_type_ids(conn)
+    await import_type_materials(conn)
 
     await conn.close()
 
