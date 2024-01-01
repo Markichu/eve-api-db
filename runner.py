@@ -4,7 +4,7 @@ import time
 
 def main():
     while True:
-        url = "http://127.0.0.1:8000/update"
+        url = "http://127.0.0.1:8000/update_tasks"
         r = requests.get(url)
         
         updated = False

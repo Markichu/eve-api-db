@@ -4,7 +4,7 @@ import decimal
 import winsound
 
 from fastapi import FastAPI
-from src.util import connect_to_db
+from src.util import connect_to_db, esi_call
 from src.tasks import (
     update_market_orders,
     aggregate_market_orders,
@@ -160,26 +160,12 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
     return
 
 
-@app.post("/add_task")
-async def add_task(task_name: str, task_params: str):
-    conn = await connect_to_db()
-    await conn.execute(
-        "INSERT INTO db_management.last_updated (task_name, task_params, last_updated, expiry) VALUES ($1, $2, $3, $4)",
-        task_name,
-        task_params,
-        datetime.datetime.min,
-        datetime.datetime.min,
-    )
-    await conn.close()
-    return {"successful": True}
-
-
+#TODO: Fix this and turn it into a functioning recurring task
 @app.post("/update_market_history")
 async def update_market_history(args: str):
     region_id = int(args)
 
     conn = await connect_to_db()
-    # type_ids = await conn.fetch("SELECT type_id from sde.type_ids WHERE published = true AND market_group_id IS NOT NULL")
     type_ids = await conn.fetch("SELECT DISTINCT ON (1) type_id from market.aggregates WHERE region_id = $1", region_id)
     type_ids = [type_id["type_id"] for type_id in type_ids]
 
@@ -220,10 +206,36 @@ async def update_market_history(args: str):
         """,
         histories,
     )
+    
+
+@app.post("/update_contracts")
+async def update_contract(args: str):
+    region_id = str(args)
+    
+    
+    
+    async for response in esi_call(f"/contracts/public/{region_id}/"):
+        print(response.status_code, response.url)
+    
 
 
-@app.get("/update")
-async def update():
+
+@app.post("/add_task")
+async def add_task(task_name: str, task_params: str):
+    conn = await connect_to_db()
+    await conn.execute(
+        "INSERT INTO db_management.last_updated (task_name, task_params, last_updated, expiry) VALUES ($1, $2, $3, $4)",
+        task_name,
+        task_params,
+        datetime.datetime.min,
+        datetime.datetime.min,
+    )
+    await conn.close()
+    return {"successful": True}
+
+
+@app.get("/update_tasks")
+async def update_tasks():
     # get tasks that need to be updated
     conn = await connect_to_db()
     tasks = await conn.fetch("SELECT * FROM db_management.last_updated")

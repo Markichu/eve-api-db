@@ -3,7 +3,7 @@ import requests
 import datetime
 import decimal
 
-from src.util import connect_to_db
+from src.util import connect_to_db, esi_call
 from collections import defaultdict
 
 
@@ -149,30 +149,16 @@ async def update_market_orders(args: str):
     print(f"Updating orders for region {args}.")
     region_id = int(args)
 
-    url = f"https://esi.evetech.net/latest/markets/{region_id}/orders/"
-    param_gen = lambda page_id: {
+    url = f"/markets/{region_id}/orders/"
+    params={
         "datasource": "tranquility",
         "order_type": "all",
-        "page": page_id,
     }
-    response = requests.get(url, params=param_gen(1), timeout=10)
-
-    if response.status_code != 200:
-        return {"successful": False, "reason": response.status_code}
-
-    other_pages = (
-        grequests.get(url, params=param_gen(i))
-        for i in range(2, int(response.headers["x-pages"]) + 1)
-    )
-    completed_orders = [response] + grequests.map(other_pages)
-
-    for response in completed_orders:
-        if response.status_code == 200:
-            continue
-        return {"successful": False, "reason": response.status_code}
 
     orders = []
-    for response in completed_orders:
+    async for response in esi_call(url, params=params):
+        if response.status_code != 200:
+            return {"successful": False, "reason": response.status_code}
         for order in response.json():
             orders.append(
                 (
