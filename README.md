@@ -12,7 +12,7 @@ Currently this has methods for aggregating market data, determining items on the
 
 ### Dependencies
 
-* Python 3 probably >3.9
+* Python 3, tested on 3.10.5
 
 * Postgresql database
 
@@ -27,13 +27,13 @@ Currently this has methods for aggregating market data, determining items on the
 ### Executing program
 
 * Start the FastAPI server with `uvicorn main:app --reload` (docs can be found at http://localhost:8000/docs)
-* Run the runner with `python3 runner.py` to start the background tasks.  This will continually make sure the database is up to date with the ESI.
+* Run the runner with `python3 runner.py` to start the background tasks. This will continually make sure the database is up to date with the ESI.
 * Run the _manufacturing.ipynb notebook to see an example of how to use the API to find profitable manufacturing items.
 
 
 ## Help
 
-Currently under continuous refinement.  If you have any questions or suggestions, please open an issue.
+Currently under continuous refinement. If you have any questions or suggestions, please open an issue.
 
 ## License
 
