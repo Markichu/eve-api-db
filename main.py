@@ -4,7 +4,7 @@ import decimal
 import winsound
 
 from fastapi import FastAPI
-from src.util import connect_to_db, esi_call
+from src.util import connect_to_db, esi_call, esi_call_itemwise
 from src.tasks import (
     update_market_orders,
     aggregate_market_orders,
@@ -214,8 +214,8 @@ async def update_contract(args: str):
     
     
     
-    async for response in esi_call(f"/contracts/public/{region_id}/"):
-        print(response.status_code, response.url)
+    async for item in esi_call_itemwise(f"/contracts/public/{region_id}/"):
+        print(item)
     
 
 

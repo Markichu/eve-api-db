@@ -1,5 +1,3 @@
-import grequests
-import requests
 import datetime
 import decimal
 

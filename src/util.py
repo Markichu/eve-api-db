@@ -2,10 +2,10 @@ import asyncpg
 import requests
 import grequests
 
-from typing import Generator
+from typing import Generator, Any
 
 ESI_BASE_URL = "https://esi.evetech.net/latest"
-CONCURRENT_REQUESTS = 16
+CONCURRENT_REQUESTS = 32
 
 
 async def connect_to_db() -> asyncpg.connection.Connection:
@@ -30,3 +30,12 @@ async def esi_call(
     )
     for response in grequests.imap(other_requests, size=CONCURRENT_REQUESTS):
         yield response
+        
+async def esi_call_itemwise(method_url: str, params: dict = None, headers: dict = None) -> Generator[Any, None, None]:
+    async for response in esi_call(method_url, params=params, headers=headers):
+        if response.status_code != 200:
+            raise Exception(f"ESI call failed with status code {response.status_code}")
+        if 'application/json' not in response.headers.get('Content-Type', ''):
+            raise Exception(f"ESI call failed with non-JSON response: {response.text}")
+        for item in response.json():
+            yield item
