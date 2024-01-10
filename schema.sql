@@ -1,3 +1,26 @@
+CREATE SCHEMA IF NOT EXISTS esi;
+
+DROP TABLE IF EXISTS esi.contracts;
+
+CREATE TABLE esi.contracts (
+    contract_id BIGINT PRIMARY KEY,
+    date_issued TIMESTAMP NOT NULL,
+    date_expired TIMESTAMP NOT NULL,
+    issuer_id BIGINT NOT NULL,
+    issuer_corporation_id BIGINT NOT NULL,
+    for_corporation BOOLEAN NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    start_location_id BIGINT NOT NULL,
+    end_location_id BIGINT NOT NULL,
+    collateral DECIMAL(20,2),              -- not present for auctions
+    reward DECIMAL(20,2) NOT NULL,
+    buyout DECIMAL(20,2),                  -- only present for auctions
+    days_to_complete BIGINT NOT NULL,
+    price DECIMAL(20,2) NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    volume DECIMAL(100,2) NOT NULL
+);
+
 CREATE SCHEMA IF NOT EXISTS market;
 
 DROP TABLE IF EXISTS market.orders;

@@ -67,12 +67,14 @@ async def calculate_manufacture_price(args: str):
     if market_updated[0]["last_updated"] <= manufacture_updated[0]["last_updated"]:
         return {"successful": False, "reason": "No new aggregates to manufacture."}
 
-    sell_prices = dict(await conn.fetch(
-        "SELECT type_id, sell_min FROM market.aggregates WHERE region_id = $1 AND location_id = $2",
-        region_id,
-        location_id,
-    ))
-    
+    sell_prices = dict(
+        await conn.fetch(
+            "SELECT type_id, sell_min FROM market.aggregates WHERE region_id = $1 AND location_id = $2",
+            region_id,
+            location_id,
+        )
+    )
+
     bp_materials = await conn.fetch(
         """
         SELECT blueprint_type_id, material_type_id, quantity 
@@ -82,18 +84,22 @@ async def calculate_manufacture_price(args: str):
         AND ti.published = true
         """,
     )
-    
+
     bp_cost = defaultdict(decimal.Decimal)
     for blueprint_type_id, material_type_id, quantity in bp_materials:
         if material_type_id not in sell_prices or sell_prices[material_type_id] is None:
             continue
         bp_cost[blueprint_type_id] += quantity * sell_prices[material_type_id]
-        
+
     manufacture = [(bp_type_id, manufacture_cost) for bp_type_id, manufacture_cost in bp_cost.items()]
     await conn.execute("TRUNCATE TABLE market.manufacture")
     await conn.copy_records_to_table("manufacture", records=manufacture, schema_name="market")
 
-    return {"successful": True, "last_updated": market_updated[0]["last_updated"], "expiry": market_updated[0]["expiry"]}
+    return {
+        "successful": True,
+        "last_updated": market_updated[0]["last_updated"],
+        "expiry": market_updated[0]["expiry"],
+    }
 
 
 async def calculate_reprocess_price(args: str):
@@ -140,7 +146,11 @@ async def calculate_reprocess_price(args: str):
     await conn.execute("TRUNCATE TABLE market.reprocess")
     await conn.copy_records_to_table("reprocess", records=reprocess, schema_name="market")
 
-    return {"successful": True, "last_updated": market_updated[0]["last_updated"], "expiry": market_updated[0]["expiry"]}
+    return {
+        "successful": True,
+        "last_updated": market_updated[0]["last_updated"],
+        "expiry": market_updated[0]["expiry"],
+    }
 
 
 async def update_market_orders(args: str):
@@ -148,7 +158,7 @@ async def update_market_orders(args: str):
     region_id = int(args)
 
     url = f"/markets/{region_id}/orders/"
-    params={
+    params = {
         "datasource": "tranquility",
         "order_type": "all",
     }
@@ -184,12 +194,6 @@ async def update_market_orders(args: str):
     print(f"Updated {len(orders)} orders for region {args}.")
     return {
         "successful": True,
-        "last_updated": datetime.datetime.strptime(
-            response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"
-        ),
-        "expiry": datetime.datetime.strptime(
-            response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"
-        ),
+        "last_updated": datetime.datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
+        "expiry": datetime.datetime.strptime(response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"),
     }
-
-

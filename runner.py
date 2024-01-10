@@ -6,7 +6,7 @@ def main():
     while True:
         url = "http://127.0.0.1:8000/update_tasks"
         r = requests.get(url)
-        
+
         updated = False
 
         if r.status_code != 200:
@@ -16,7 +16,7 @@ def main():
             for task_updated in r.json():
                 updated = updated or task_updated["successful"]
                 print(task_updated)
-                
+
         if updated:
             url = "http://127.0.0.1:8000/test?rep_yield=0.55&tax=0.036&roi=0.1"
             r = requests.get(url)

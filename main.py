@@ -160,7 +160,7 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
     return
 
 
-#TODO: Fix this and turn it into a functioning recurring task
+# TODO: Fix this and turn it into a functioning recurring task
 @app.post("/update_market_history")
 async def update_market_history(args: str):
     region_id = int(args)
@@ -206,18 +206,13 @@ async def update_market_history(args: str):
         """,
         histories,
     )
-    
+
 
 @app.post("/update_contracts")
 async def update_contract(args: str):
     region_id = str(args)
-    
-    
-    
     async for item in esi_call_itemwise(f"/contracts/public/{region_id}/"):
         print(item)
-    
-
 
 
 @app.post("/add_task")
