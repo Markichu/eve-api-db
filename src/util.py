@@ -2,7 +2,7 @@ import asyncpg
 import requests
 import grequests
 
-from typing import Generator, Any
+from typing import AsyncGenerator, Any
 
 ESI_BASE_URL = "https://esi.evetech.net/latest"
 CONCURRENT_REQUESTS = None
@@ -15,7 +15,7 @@ async def connect_to_db() -> asyncpg.connection.Connection:
 
 async def esi_call(
     method_url: str, params: dict = None, headers: dict = None
-) -> Generator[requests.Response, None, None]:
+) -> AsyncGenerator[requests.Response, None]:
     params = params or {}
     endpoint_url = ESI_BASE_URL + method_url
 
@@ -32,8 +32,17 @@ async def esi_call(
         yield response
 
 
-async def esi_call_itemwise(method_url: str, params: dict = None, headers: dict = None) -> Generator[Any, None, None]:
+async def esi_call_itemwise(method_url: str, params: dict = None, headers: dict = None) -> AsyncGenerator[Any, None]:
     async for response in esi_call(method_url, params=params, headers=headers):
+        # yield response data
+        yield {
+            "is_headers": True,
+            "expires": response.headers["expires"],
+            "last-modified": response.headers["last-modified"],
+            "x-esi-error-limit-remain": response.headers["x-esi-error-limit-remain"],
+            "x-esi-error-limit-reset": response.headers["x-esi-error-limit-reset"],
+            "x-pages": response.headers["x-pages"],
+        }
         if response.status_code != 200:
             raise Exception(f"ESI call failed with status code {response.status_code}")
         if "application/json" not in response.headers.get("Content-Type", ""):

@@ -1,7 +1,6 @@
-import datetime
-import decimal
-
-from src.util import connect_to_db, esi_call
+from decimal import Decimal
+from datetime import datetime, timedelta
+from src.util import connect_to_db, esi_call, esi_call_itemwise
 from collections import defaultdict
 
 
@@ -85,7 +84,7 @@ async def calculate_manufacture_price(args: str):
         """,
     )
 
-    bp_cost = defaultdict(decimal.Decimal)
+    bp_cost = defaultdict(Decimal)
     for blueprint_type_id, material_type_id, quantity in bp_materials:
         if material_type_id not in sell_prices or sell_prices[material_type_id] is None:
             continue
@@ -181,7 +180,7 @@ async def update_market_orders(args: str):
                     order["price"],
                     order["range"],
                     order["is_buy_order"],
-                    datetime.datetime.strptime(order["issued"], "%Y-%m-%dT%H:%M:%SZ"),
+                    datetime.strptime(order["issued"], "%Y-%m-%dT%H:%M:%SZ"),
                     order["duration"],
                 )
             )
@@ -194,6 +193,127 @@ async def update_market_orders(args: str):
     print(f"Updated {len(orders)} orders for region {args}.")
     return {
         "successful": True,
-        "last_updated": datetime.datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
-        "expiry": datetime.datetime.strptime(response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"),
+        "last_updated": datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
+        "expiry": datetime.strptime(response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"),
+    }
+    
+
+async def update_contracts(args: str):
+    print(f"Updating contracts for region {args}.")
+    region_id = int(args)
+    
+    last_updated = datetime.utcnow()
+    data_expiry = datetime.utcnow() + timedelta(hours=1)
+    contracts = []
+    async for item in esi_call_itemwise(f"/contracts/public/{region_id}/"):
+        if item.get("is_headers", False):
+            last_updated = datetime.strptime(item["last-modified"], "%a, %d %b %Y %H:%M:%S %Z")
+            data_expiry = datetime.strptime(item["expires"], "%a, %d %b %Y %H:%M:%S %Z")
+            continue
+        
+        contracts.append((
+            item["contract_id"],
+            datetime.strptime(item["date_issued"], "%Y-%m-%dT%H:%M:%SZ"),
+            datetime.strptime(item["date_expired"], "%Y-%m-%dT%H:%M:%SZ"),
+            item["issuer_id"],
+            item["issuer_corporation_id"],
+            item.get("for_corporation", False),
+            item["type"],
+            item["start_location_id"],
+            item["end_location_id"],
+            region_id,
+            item.get("collateral", None),
+            item["reward"],
+            item.get("buyout", None),
+            item["days_to_complete"],
+            item["price"],
+            item["title"],
+            item["volume"],
+        ))
+        
+    conn = await connect_to_db()
+    await conn.execute("DELETE FROM esi.contracts WHERE region_id = $1", region_id)
+    await conn.copy_records_to_table("contracts", records=contracts, schema_name="esi")
+    await conn.close()
+    
+    print(f"Updated {len(contracts)} contracts for region {region_id}.")
+    return {
+        "successful": True,
+        "last_updated": last_updated,
+        "expiry": data_expiry,
+    }
+    
+async def update_contract_items(args: str):
+    print(f"Updating contract items")
+    region_id = int(args)
+    conn = await connect_to_db()
+
+    removed_items = await conn.fetch(
+        """
+        DELETE FROM esi.contract_items ci
+        WHERE ci.contract_id NOT IN (SELECT contract_id FROM esi.contracts);
+        """
+    )
+    print(f"Removed {len(removed_items)} items from contracts that no longer exist")
+
+    contracts = await conn.fetch(
+        """
+        SELECT c.contract_id
+        FROM esi.contracts c
+        LEFT JOIN esi.contract_items ci USING (contract_id)
+        WHERE ci.record_id IS NULL 
+        AND c.type IN ('item_exchange', 'auction')
+        AND c.region_id = $1;
+        """,
+        region_id,
+    )
+    print(f"Found {len(contracts)} contracts with missing items")
+    incomplete_contracts = False
+
+    for contract in contracts:
+        print(f"Retrieving items for contract {contract['contract_id']}")
+        contract_items = []
+        try:
+            async for item in esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}"):
+                if item.get("is_headers", False):
+                    continue
+                contract_items.append(
+                    (
+                        contract["contract_id"],
+                        item["record_id"],
+                        item["type_id"],
+                        item["quantity"],
+                        item["is_included"],
+                        item.get("item_id", None),
+                        item.get("is_blueprint_copy", False),
+                        item.get("material_efficiency", None),
+                        item.get("time_efficiency", None),
+                        item.get("runs", None),
+                    )
+                )
+
+            await conn.executemany(
+                """
+                INSERT INTO esi.contract_items (contract_id, record_id, type_id, quantity, is_included, item_id, is_blueprint_copy, material_efficiency, time_efficiency, runs)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """,
+                contract_items,
+            )
+            print(f"Inserted {len(contract_items)} items for contract {contract['contract_id']}")
+        except Exception as e:
+            print(f"Failed to retrieve items for contract {contract['contract_id']}")
+            print(e)
+            incomplete_contracts = True
+            
+    print("Finished updating contract items")
+    contract_expiry = await conn.fetchrow(
+        "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contracts'",
+        args,
+    )
+    
+    await conn.close()
+    return {
+        "successful": True,
+        "last_updated": datetime.utcnow(),
+        "expiry": min(datetime.utcnow() + timedelta(minutes=5), contract_expiry["expiry"]) if incomplete_contracts else contract_expiry["expiry"]
     }

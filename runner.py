@@ -10,18 +10,18 @@ def main():
         updated = False
 
         if r.status_code != 200:
-            print(f"Failed to send update request: {r.status_code}")
+            print(f"Failed to send update request: {r.status_code} {r.text}")
         else:
-            print(f"Update request sent successfully: {r.status_code}")
+            print(f"<{r.status_code}>", end="")
             for task_updated in r.json():
                 updated = updated or task_updated["successful"]
-                print(task_updated)
+                print(f"\n{task_updated}")
 
         if updated:
             url = "http://127.0.0.1:8000/test?rep_yield=0.55&tax=0.036&roi=0.1"
             r = requests.get(url)
 
-        time.sleep(5)
+        time.sleep(1)
 
 
 if __name__ == "__main__":

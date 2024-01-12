@@ -2,6 +2,7 @@ CREATE SCHEMA IF NOT EXISTS esi;
 
 DROP TABLE IF EXISTS esi.contracts;
 
+-- TODO: Remove unnecessary region_id column since it can be derived from the start_location_id/end_location_id
 CREATE TABLE esi.contracts (
     contract_id BIGINT PRIMARY KEY,
     date_issued TIMESTAMP NOT NULL,
@@ -12,6 +13,7 @@ CREATE TABLE esi.contracts (
     type VARCHAR(32) NOT NULL,
     start_location_id BIGINT NOT NULL,
     end_location_id BIGINT NOT NULL,
+    region_id BIGINT NOT NULL,
     collateral DECIMAL(20,2),              -- not present for auctions
     reward DECIMAL(20,2) NOT NULL,
     buyout DECIMAL(20,2),                  -- only present for auctions
@@ -19,6 +21,22 @@ CREATE TABLE esi.contracts (
     price DECIMAL(20,2) NOT NULL,
     title VARCHAR(100) NOT NULL,
     volume DECIMAL(100,2) NOT NULL
+);
+
+DROP TABLE IF EXISTS esi.contract_items;
+
+CREATE TABLE esi.contract_items (
+    contract_id BIGINT NOT NULL,
+    record_id BIGINT NOT NULL,
+    type_id INT NOT NULL,
+    quantity BIGINT NOT NULL,
+    is_included BOOLEAN NOT NULL,
+    item_id BIGINT,
+    is_blueprint_copy BOOLEAN,
+    material_efficiency INT,
+    time_efficiency INT,
+    runs INT,
+    PRIMARY KEY (contract_id, record_id)
 );
 
 CREATE SCHEMA IF NOT EXISTS market;

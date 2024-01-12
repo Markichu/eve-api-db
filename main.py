@@ -1,12 +1,14 @@
 import grequests
-import datetime
-import decimal
 import winsound
 
+from decimal import Decimal
+from datetime import datetime, timedelta
 from fastapi import FastAPI
 from src.util import connect_to_db, esi_call, esi_call_itemwise
 from src.tasks import (
     update_market_orders,
+    update_contracts,
+    update_contract_items,
     aggregate_market_orders,
     calculate_reprocess_price,
     calculate_manufacture_price,
@@ -17,8 +19,8 @@ app = FastAPI()
 
 @app.get("/analyse")
 async def analyse(items: str, rep_yield: float = 0.55, tax: float = 0.036):
-    YIELD = decimal.Decimal(rep_yield)
-    TAX = decimal.Decimal(tax)
+    YIELD = Decimal(rep_yield)
+    TAX = Decimal(tax)
     items_split = items.split("\t")
     items_split = [items_split[0]] + [item.split(" ", 1)[1] for item in items_split[1:-1]]
 
@@ -70,9 +72,9 @@ async def analyse(items: str, rep_yield: float = 0.55, tax: float = 0.036):
 
 @app.get("/test")
 async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
-    YIELD = decimal.Decimal(rep_yield)
-    TAX = decimal.Decimal(tax)
-    ROI = decimal.Decimal(roi)
+    YIELD = Decimal(rep_yield)
+    TAX = Decimal(tax)
+    ROI = Decimal(roi)
 
     location_id = 60003760
 
@@ -106,15 +108,15 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
 
         breakeven_price = (YIELD * value["reprocess_value"]) * (1 - TAX)
 
-        total_value = decimal.Decimal(0)
-        total_volume = decimal.Decimal(0)
+        total_value = Decimal(0)
+        total_volume = Decimal(0)
         for order in value["sell_orders"]:
             if order["price"] > breakeven_price / (1 + ROI):
                 continue
-            total_value += decimal.Decimal(order["price"]) * decimal.Decimal(order["volume_remain"])
-            total_volume += decimal.Decimal(order["volume_remain"])
+            total_value += Decimal(order["price"]) * Decimal(order["volume_remain"])
+            total_volume += Decimal(order["volume_remain"])
 
-        total_reprocess_value = total_volume * decimal.Decimal(value["reprocess_value"]) * YIELD * (1 - TAX)
+        total_reprocess_value = total_volume * Decimal(value["reprocess_value"]) * YIELD * (1 - TAX)
         if total_reprocess_value == 0:
             continue
 
@@ -151,7 +153,7 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
     if need_to_notify:
         winsound.Beep(440, 100)
         # play a sound that changes dynamically based on the amount of profit
-        winsound.Beep(440 + int(max_profit / decimal.Decimal(1e6)), 100)
+        winsound.Beep(440 + int(max_profit / Decimal(1e6)), 100)
 
     print(
         f"\n{'Total':<64} {sum([order['buy_value'] for order in purchase_orders]):<15} {sum([order['sell_value'] for order in purchase_orders]):<15} {sum([order['profit'] for order in purchase_orders]):<15}"
@@ -208,13 +210,6 @@ async def update_market_history(args: str):
     )
 
 
-@app.post("/update_contracts")
-async def update_contract(args: str):
-    region_id = str(args)
-    async for item in esi_call_itemwise(f"/contracts/public/{region_id}/"):
-        print(item)
-
-
 @app.post("/add_task")
 async def add_task(task_name: str, task_params: str):
     conn = await connect_to_db()
@@ -222,8 +217,8 @@ async def add_task(task_name: str, task_params: str):
         "INSERT INTO db_management.last_updated (task_name, task_params, last_updated, expiry) VALUES ($1, $2, $3, $4)",
         task_name,
         task_params,
-        datetime.datetime.min,
-        datetime.datetime.min,
+        datetime.min,
+        datetime.min,
     )
     await conn.close()
     return {"successful": True}
@@ -240,12 +235,14 @@ async def update_tasks():
         "market.aggregates": aggregate_market_orders,
         "market.reprocess": calculate_reprocess_price,
         "market.manufacture": calculate_manufacture_price,
+        "esi.contracts": update_contracts,
+        "esi.contract_items": update_contract_items,
     }
     task_status = []
 
     for task in tasks:
         # check if task needs to be updated
-        if task["expiry"] > datetime.datetime.utcnow():
+        if task["expiry"] > datetime.utcnow():
             continue
         try:
             result = await TASKS[task["task_name"]](task["task_params"])
