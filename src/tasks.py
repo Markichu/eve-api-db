@@ -248,13 +248,13 @@ async def update_contract_items(args: str):
     region_id = int(args)
     conn = await connect_to_db()
 
-    removed_items = await conn.fetch(
+    removed_items = await conn.execute(
         """
         DELETE FROM esi.contract_items ci
         WHERE ci.contract_id NOT IN (SELECT contract_id FROM esi.contracts);
         """
     )
-    print(f"Removed {len(removed_items)} items from contracts that no longer exist")
+    print(f"{removed_items} items from contracts that no longer exist")
 
     contracts = await conn.fetch(
         """
