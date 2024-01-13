@@ -320,7 +320,7 @@ async def update_contracts(args: str):
     }
     
 async def update_contract_items(args: str):
-    print(f"[update_contract_items] Updating contract items")
+    print(f"[update_contract_items] Updating contract items for region {args}.")
     region_id = int(args)
     conn = await connect_to_db()
 
@@ -344,7 +344,7 @@ async def update_contract_items(args: str):
         region_id,
     )
     print(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
-    incomplete_contracts = False
+    incomplete_contracts = 0
     
     contract_item_lists = [gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")) for contract in contracts]
     contract_item_lists = await asyncio.gather(*contract_item_lists)
@@ -380,9 +380,9 @@ async def update_contract_items(args: str):
         except Exception as e:
             print(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
             print(e)
-            incomplete_contracts = True
+            incomplete_contracts += 1
             
-    print("[update_contract_items] Finished updating contract items")
+    print(f"[update_contract_items] Finished retrieving items for {len(contracts) - incomplete_contracts}/{len(contracts)} contracts.")
     contract_expiry = await conn.fetchrow(
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contracts'",
         args,
@@ -392,5 +392,5 @@ async def update_contract_items(args: str):
     return {
         "successful": True,
         "last_updated": datetime.utcnow(),
-        "expiry": min(datetime.utcnow() + timedelta(minutes=5), contract_expiry["expiry"]) if incomplete_contracts else contract_expiry["expiry"]
+        "expiry": min(datetime.utcnow() + timedelta(minutes=5), contract_expiry["expiry"]) if incomplete_contracts > 0 else contract_expiry["expiry"]
     }
