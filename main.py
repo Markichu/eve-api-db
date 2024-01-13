@@ -1,6 +1,8 @@
 import grequests
 import winsound
+import logging
 
+from collections import defaultdict
 from decimal import Decimal
 from datetime import datetime, timedelta
 from fastapi import FastAPI
@@ -10,11 +12,18 @@ from src.tasks import (
     update_contracts,
     update_contract_items,
     aggregate_market_orders,
+    aggregate_bp_contracts,
     calculate_reprocess_price,
     calculate_manufacture_price,
 )
 
 app = FastAPI()
+
+class UpdateTasksFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("/update_tasks") == -1
+
+logging.getLogger("uvicorn.access").addFilter(UpdateTasksFilter())
 
 
 @app.get("/analyse")
@@ -232,6 +241,7 @@ async def update_tasks():
 
     TASKS = {
         "market.aggregates": aggregate_market_orders,
+        "market.bp_contracts": aggregate_bp_contracts,
         "market.reprocess": calculate_reprocess_price,
         "market.manufacture": calculate_manufacture_price,
         "esi.market_orders": update_market_orders,

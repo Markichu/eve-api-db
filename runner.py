@@ -14,7 +14,7 @@ def main():
         else:
             print(f"<{r.status_code}>", end="")
             for task_updated in r.json():
-                updated = updated or task_updated["successful"]
+                updated = updated or (task_updated["task_name"] == 'esi.market_orders' and task_updated["successful"])
                 print(f"\n{task_updated}")
 
         if updated:

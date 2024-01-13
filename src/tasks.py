@@ -1,11 +1,13 @@
+import asyncio
+
 from decimal import Decimal
 from datetime import datetime, timedelta
-from src.util import connect_to_db, esi_call, esi_call_itemwise
+from src.util import connect_to_db, esi_call, esi_call_itemwise, gather_generator
 from collections import defaultdict
 
 
 async def aggregate_market_orders(args: str):
-    print(f"Aggregating orders for region {args}.")
+    print(f"[aggregate_market_orders] Aggregating orders for region {args}.")
     region_id = int(args)
     conn = await connect_to_db()
     market_updated = await conn.fetch(
@@ -42,11 +44,85 @@ async def aggregate_market_orders(args: str):
     await conn.execute("DELETE FROM market.aggregates WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("aggregates", records=aggs, schema_name="market")
 
-    print(f"Aggregated {len(aggs)} orders for region {args}.")
+    print(f"[aggregate_market_orders] Aggregated {len(aggs)} orders for region {args}.")
     return {
         "successful": True,
         "last_updated": market_updated[0]["last_updated"],
         "expiry": market_updated[0]["expiry"],
+    }
+    
+
+async def aggregate_bp_contracts(args: str):
+    print(f"[aggregate_bp_contracts] Aggregating BP contracts for region {args}.")
+    region_id = int(args)
+    
+    conn = await connect_to_db()
+    contracts_updated = await conn.fetchrow(
+        "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contract_items'",
+        args,
+    )
+    agg_updated = await conn.fetchrow(
+        "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'market.bp_contracts'",
+        args,
+    )
+    
+    if contracts_updated["last_updated"] <= agg_updated["last_updated"]:
+        return {"successful": False, "reason": "No new contract items to aggregate."}
+    
+    contracts_data = await conn.fetch(
+        """
+        SELECT *
+        FROM esi.contracts
+        WHERE region_id = $1
+        """,
+        region_id,
+    )
+    contract_items_data = await conn.fetch(
+        """
+        SELECT *
+        FROM esi.contract_items
+        """
+    )
+    contract_items = defaultdict(list)
+    
+    # add associated items for each contract to dict
+    for contract_item in contract_items_data:
+        contract_items[contract_item["contract_id"]].append(contract_item)
+    
+    bp_contracts = []
+    # collect all contracts that are bpo or bpc
+    for contract in contracts_data:
+        if contract["type"] != "item_exchange":
+            continue
+        if len(contract_items[contract["contract_id"]]) != 1:
+            continue
+        contract_item = contract_items[contract["contract_id"]][0]
+        if contract_item["is_included"] == False:
+            continue
+        if contract_item["material_efficiency"] == None:
+            continue
+        
+        bp_contracts.append(
+            (
+                contract["contract_id"],
+                region_id,
+                contract_item["type_id"],
+                contract["price"],
+                contract_item["is_blueprint_copy"],
+                contract_item["material_efficiency"],
+                contract_item["time_efficiency"],
+                contract_item["runs"],
+            )
+        )
+    
+    await conn.execute("DELETE FROM market.bp_contracts WHERE region_id = $1", region_id)
+    await conn.copy_records_to_table("bp_contracts", records=bp_contracts, schema_name="market")
+    await conn.close()
+    print(f"[aggregate_bp_contracts] Aggregated {len(bp_contracts)} BP contracts for region {args}.")
+    return {
+        "successful": True,
+        "last_updated": contracts_updated["last_updated"],
+        "expiry": contracts_updated["expiry"],
     }
 
 
@@ -153,7 +229,7 @@ async def calculate_reprocess_price(args: str):
 
 
 async def update_market_orders(args: str):
-    print(f"Updating orders for region {args}.")
+    print(f"[update_market_orders] Updating orders for region {args}.")
     region_id = int(args)
 
     url = f"/markets/{region_id}/orders/"
@@ -190,7 +266,7 @@ async def update_market_orders(args: str):
     await conn.copy_records_to_table("market_orders", records=orders, schema_name="esi")
     await conn.close()
 
-    print(f"Updated {len(orders)} orders for region {args}.")
+    print(f"[update_market_orders] Updated {len(orders)} orders for region {args}.")
     return {
         "successful": True,
         "last_updated": datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
@@ -199,7 +275,7 @@ async def update_market_orders(args: str):
     
 
 async def update_contracts(args: str):
-    print(f"Updating contracts for region {args}.")
+    print(f"[update_contracts] Updating contracts for region {args}.")
     region_id = int(args)
     
     last_updated = datetime.utcnow()
@@ -236,7 +312,7 @@ async def update_contracts(args: str):
     await conn.copy_records_to_table("contracts", records=contracts, schema_name="esi")
     await conn.close()
     
-    print(f"Updated {len(contracts)} contracts for region {region_id}.")
+    print(f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}.")
     return {
         "successful": True,
         "last_updated": last_updated,
@@ -244,7 +320,7 @@ async def update_contracts(args: str):
     }
     
 async def update_contract_items(args: str):
-    print(f"Updating contract items")
+    print(f"[update_contract_items] Updating contract items")
     region_id = int(args)
     conn = await connect_to_db()
 
@@ -254,7 +330,7 @@ async def update_contract_items(args: str):
         WHERE ci.contract_id NOT IN (SELECT contract_id FROM esi.contracts);
         """
     )
-    print(f"{removed_items} items from contracts that no longer exist")
+    print(f"[update_contract_items] {removed_items} items from contracts that no longer exist")
 
     contracts = await conn.fetch(
         """
@@ -267,14 +343,16 @@ async def update_contract_items(args: str):
         """,
         region_id,
     )
-    print(f"Found {len(contracts)} contracts with missing items")
+    print(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
     incomplete_contracts = False
+    
+    contract_item_lists = [gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")) for contract in contracts]
+    contract_item_lists = await asyncio.gather(*contract_item_lists)
 
-    for contract in contracts:
-        print(f"Retrieving items for contract {contract['contract_id']}")
+    for contract, item_list in zip(contracts, contract_item_lists):
         contract_items = []
         try:
-            async for item in esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}"):
+            for item in item_list:
                 if item.get("is_headers", False):
                     continue
                 contract_items.append(
@@ -299,13 +377,12 @@ async def update_contract_items(args: str):
                 """,
                 contract_items,
             )
-            print(f"Inserted {len(contract_items)} items for contract {contract['contract_id']}")
         except Exception as e:
-            print(f"Failed to retrieve items for contract {contract['contract_id']}")
+            print(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
             print(e)
             incomplete_contracts = True
             
-    print("Finished updating contract items")
+    print("[update_contract_items] Finished updating contract items")
     contract_expiry = await conn.fetchrow(
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contracts'",
         args,

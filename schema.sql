@@ -1,3 +1,4 @@
+-- ESI schema, for storing data retrieved from the eve swagger interface
 CREATE SCHEMA IF NOT EXISTS esi;
 
 DROP TABLE IF EXISTS esi.contracts;
@@ -70,38 +71,7 @@ CREATE TABLE esi.market_history (
     PRIMARY KEY (type_id, date)
 );
 
-CREATE SCHEMA IF NOT EXISTS market;
-
-DROP TABLE IF EXISTS market.aggregates;
-
-CREATE TABLE market.aggregates (
-    location_id BIGINT NOT NULL,
-    type_id INT NOT NULL,
-    sell_min DECIMAL(20,2),
-    buy_max DECIMAL(20,2),
-    sell_volume BIGINT NOT NULL,
-    buy_volume BIGINT NOT NULL,
-    sell_orders INT NOT NULL,
-    buy_orders INT NOT NULL,
-    region_id BIGINT NOT NULL,
-    PRIMARY KEY (location_id, type_id)
-);
-
-DROP TABLE IF EXISTS market.reprocess;
-
-CREATE TABLE market.reprocess (
-    type_id INT NOT NULL PRIMARY KEY,
-    reprocess_value DECIMAL(22,4) NOT NULL
-);
-
-DROP TABLE IF EXISTS market.manufacture;
-
-CREATE TABLE market.manufacture (
-    type_id INT NOT NULL PRIMARY KEY,
-    manufacture_value DECIMAL(22,4) NOT NULL
-);
-
--- SDE schema, for storing data related to the static data export
+-- SDE schema, for storing data extracted from the static data export
 CREATE SCHEMA IF NOT EXISTS sde;
 
 DROP TABLE IF EXISTS sde.blueprints;
@@ -205,4 +175,49 @@ CREATE TABLE db_management.last_updated (
 );
 
 ALTER TABLE db_management.last_updated ADD CONSTRAINT last_updated_pk PRIMARY KEY (task_name, task_params);
+
+-- Market schema, for storing aggregated and calculated data related to the market
+CREATE SCHEMA IF NOT EXISTS market;
+
+DROP TABLE IF EXISTS market.aggregates;
+
+CREATE TABLE market.aggregates (
+    location_id BIGINT NOT NULL,
+    type_id INT NOT NULL,
+    sell_min DECIMAL(20,2),
+    buy_max DECIMAL(20,2),
+    sell_volume BIGINT NOT NULL,
+    buy_volume BIGINT NOT NULL,
+    sell_orders INT NOT NULL,
+    buy_orders INT NOT NULL,
+    region_id BIGINT NOT NULL,
+    PRIMARY KEY (location_id, type_id)
+);
+
+DROP TABLE IF EXISTS market.reprocess;
+
+CREATE TABLE market.reprocess (
+    type_id INT NOT NULL PRIMARY KEY,
+    reprocess_value DECIMAL(22,4) NOT NULL
+);
+
+DROP TABLE IF EXISTS market.manufacture;
+
+CREATE TABLE market.manufacture (
+    type_id INT NOT NULL PRIMARY KEY,
+    manufacture_value DECIMAL(22,4) NOT NULL
+);
+
+DROP TABLE IF EXISTS market.bp_contracts;
+
+CREATE TABLE market.bp_contracts (
+    contract_id BIGINT NOT NULL PRIMARY KEY,
+    region_id BIGINT NOT NULL,
+    type_id INT NOT NULL,
+    price DECIMAL(20,2) NOT NULL,
+    is_blueprint_copy BOOLEAN NOT NULL,
+    material_efficiency INT NOT NULL,
+    time_efficiency INT NOT NULL,
+    runs INT
+);
 

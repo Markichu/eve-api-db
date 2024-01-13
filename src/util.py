@@ -37,11 +37,11 @@ async def esi_call_itemwise(method_url: str, params: dict = None, headers: dict 
         # yield response data
         yield {
             "is_headers": True,
-            "expires": response.headers["expires"],
-            "last-modified": response.headers["last-modified"],
-            "x-esi-error-limit-remain": response.headers["x-esi-error-limit-remain"],
-            "x-esi-error-limit-reset": response.headers["x-esi-error-limit-reset"],
-            "x-pages": response.headers["x-pages"],
+            "expires": response.headers.get("expires", 0),
+            "last-modified": response.headers.get("last-modified", 0),
+            "x-esi-error-limit-remain": response.headers.get("x-esi-error-limit-remain", 0),
+            "x-esi-error-limit-reset": response.headers.get("x-esi-error-limit-reset", 0),
+            "x-pages": response.headers.get("x-pages", 0),
         }
         if response.status_code != 200:
             raise Exception(f"ESI call failed with status code {response.status_code}")
@@ -49,3 +49,6 @@ async def esi_call_itemwise(method_url: str, params: dict = None, headers: dict 
             raise Exception(f"ESI call failed with non-JSON response: {response.text}")
         for item in response.json():
             yield item
+            
+async def gather_generator(generator):
+    return [item async for item in generator]
