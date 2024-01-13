@@ -39,11 +39,9 @@ CREATE TABLE esi.contract_items (
     PRIMARY KEY (contract_id, record_id)
 );
 
-CREATE SCHEMA IF NOT EXISTS market;
+DROP TABLE IF EXISTS esi.market_orders;
 
-DROP TABLE IF EXISTS market.orders;
-
-CREATE TABLE market.orders (
+CREATE TABLE esi.market_orders (
     order_id BIGINT PRIMARY KEY,
     type_id INT NOT NULL,
     location_id BIGINT NOT NULL,
@@ -59,9 +57,9 @@ CREATE TABLE market.orders (
     duration INT NOT NULL
 );
 
-DROP TABLE IF EXISTS market.history;
+DROP TABLE IF EXISTS esi.market_history;
 
-CREATE TABLE market.history (
+CREATE TABLE esi.market_history (
     type_id INT NOT NULL,
     date TIMESTAMP NOT NULL,
     highest DECIMAL(20,2) NOT NULL,
@@ -71,6 +69,8 @@ CREATE TABLE market.history (
     order_count INT NOT NULL,
     PRIMARY KEY (type_id, date)
 );
+
+CREATE SCHEMA IF NOT EXISTS market;
 
 DROP TABLE IF EXISTS market.aggregates;
 

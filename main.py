@@ -84,7 +84,7 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
 
     reprocess_prices = await conn.fetch("SELECT * FROM market.reprocess")
     orders = await conn.fetch(
-        "SELECT * FROM market.orders WHERE location_id = $1 AND is_buy_order = False",
+        "SELECT * FROM esi.market_orders WHERE location_id = $1 AND is_buy_order = False",
         location_id,
     )
     type_names = dict(await conn.fetch("SELECT type_id, name from sde.type_ids"))
@@ -231,10 +231,10 @@ async def update_tasks():
     tasks = await conn.fetch("SELECT * FROM db_management.last_updated")
 
     TASKS = {
-        "market.orders": update_market_orders,
         "market.aggregates": aggregate_market_orders,
         "market.reprocess": calculate_reprocess_price,
         "market.manufacture": calculate_manufacture_price,
+        "esi.market_orders": update_market_orders,
         "esi.contracts": update_contracts,
         "esi.contract_items": update_contract_items,
     }

@@ -9,7 +9,7 @@ async def aggregate_market_orders(args: str):
     region_id = int(args)
     conn = await connect_to_db()
     market_updated = await conn.fetch(
-        "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'market.orders'",
+        "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.market_orders'",
         str(region_id),
     )
     agg_updated = await conn.fetch(
@@ -32,7 +32,7 @@ async def aggregate_market_orders(args: str):
             count(CASE WHEN is_buy_order = false THEN 1 END) as sell_orders,
             count(CASE WHEN is_buy_order = true THEN 1 END) as buy_orders,
             region_id
-        FROM market.orders
+        FROM esi.market_orders
         WHERE region_id = $1
         GROUP BY type_id, location_id, region_id
         """,
@@ -186,8 +186,8 @@ async def update_market_orders(args: str):
             )
 
     conn = await connect_to_db()
-    await conn.execute("DELETE FROM market.orders WHERE region_id = $1", region_id)
-    await conn.copy_records_to_table("orders", records=orders, schema_name="market")
+    await conn.execute("DELETE FROM esi.market_orders WHERE region_id = $1", region_id)
+    await conn.copy_records_to_table("market_orders", records=orders, schema_name="esi")
     await conn.close()
 
     print(f"Updated {len(orders)} orders for region {args}.")
