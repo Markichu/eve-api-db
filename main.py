@@ -1,6 +1,7 @@
 import grequests
 import winsound
 import logging
+from uvicorn.logging import ColourizedFormatter
 
 from collections import defaultdict
 from decimal import Decimal
@@ -18,12 +19,23 @@ from src.tasks import (
 )
 
 app = FastAPI()
+LOGGER = logging.getLogger("uvicorn.access")
+
 
 class UpdateTasksFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return record.getMessage().find("/update_tasks") == -1
 
-logging.getLogger("uvicorn.access").addFilter(UpdateTasksFilter())
+
+LOGGER.addFilter(UpdateTasksFilter())
+
+
+@app.on_event("startup")
+async def startup_event():
+    console_formatter = ColourizedFormatter(
+        "{asctime} {levelprefix} {message}", style="{", use_colors=True, datefmt="[%H:%M:%S %d/%m/%y]"
+    )
+    LOGGER.handlers[0].setFormatter(console_formatter)
 
 
 @app.get("/analyse")

@@ -1,13 +1,15 @@
 import asyncio
+import logging
 
 from decimal import Decimal
 from datetime import datetime, timedelta
 from src.util import connect_to_db, esi_call, esi_call_itemwise, gather_generator
 from collections import defaultdict
 
+LOGGER = logging.getLogger("uvicorn.access")
 
 async def aggregate_market_orders(args: str):
-    print(f"[aggregate_market_orders] Aggregating orders for region {args}.")
+    LOGGER.info(f"[aggregate_market_orders] Aggregating orders for region {args}.")
     region_id = int(args)
     conn = await connect_to_db()
     market_updated = await conn.fetch(
@@ -44,7 +46,7 @@ async def aggregate_market_orders(args: str):
     await conn.execute("DELETE FROM market.aggregates WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("aggregates", records=aggs, schema_name="market")
 
-    print(f"[aggregate_market_orders] Aggregated {len(aggs)} orders for region {args}.")
+    LOGGER.info(f"[aggregate_market_orders] Aggregated {len(aggs)} orders for region {args}.")
     return {
         "successful": True,
         "last_updated": market_updated[0]["last_updated"],
@@ -53,7 +55,7 @@ async def aggregate_market_orders(args: str):
     
 
 async def aggregate_bp_contracts(args: str):
-    print(f"[aggregate_bp_contracts] Aggregating BP contracts for region {args}.")
+    LOGGER.info(f"[aggregate_bp_contracts] Aggregating BP contracts for region {args}.")
     region_id = int(args)
     
     conn = await connect_to_db()
@@ -118,7 +120,7 @@ async def aggregate_bp_contracts(args: str):
     await conn.execute("DELETE FROM market.bp_contracts WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("bp_contracts", records=bp_contracts, schema_name="market")
     await conn.close()
-    print(f"[aggregate_bp_contracts] Aggregated {len(bp_contracts)} BP contracts for region {args}.")
+    LOGGER.info(f"[aggregate_bp_contracts] Aggregated {len(bp_contracts)} BP contracts for region {args}.")
     return {
         "successful": True,
         "last_updated": contracts_updated["last_updated"],
@@ -127,7 +129,7 @@ async def aggregate_bp_contracts(args: str):
 
 
 async def calculate_manufacture_price(args: str):
-    print(f"Calculating manufacture cost prices for region {args}.")
+    LOGGER.info(f"Calculating manufacture cost prices for region {args}.")
     region_id, location_id = (int(arg) for arg in args.split(","))
     conn = await connect_to_db()
     market_updated = await conn.fetch(
@@ -178,7 +180,7 @@ async def calculate_manufacture_price(args: str):
 
 
 async def calculate_reprocess_price(args: str):
-    print(f"Calculating reprocess prices for region {args}.")
+    LOGGER.info(f"Calculating reprocess prices for region {args}.")
     region_id, location_id = (int(arg) for arg in args.split(","))
     conn = await connect_to_db()
     market_updated = await conn.fetch(
@@ -229,7 +231,7 @@ async def calculate_reprocess_price(args: str):
 
 
 async def update_market_orders(args: str):
-    print(f"[update_market_orders] Updating orders for region {args}.")
+    LOGGER.info(f"[update_market_orders] Updating orders for region {args}.")
     region_id = int(args)
 
     url = f"/markets/{region_id}/orders/"
@@ -266,7 +268,7 @@ async def update_market_orders(args: str):
     await conn.copy_records_to_table("market_orders", records=orders, schema_name="esi")
     await conn.close()
 
-    print(f"[update_market_orders] Updated {len(orders)} orders for region {args}.")
+    LOGGER.info(f"[update_market_orders] Updated {len(orders)} orders for region {args}.")
     return {
         "successful": True,
         "last_updated": datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
@@ -275,7 +277,7 @@ async def update_market_orders(args: str):
     
 
 async def update_contracts(args: str):
-    print(f"[update_contracts] Updating contracts for region {args}.")
+    LOGGER.info(f"[update_contracts] Updating contracts for region {args}.")
     region_id = int(args)
     
     last_updated = datetime.utcnow()
@@ -312,7 +314,7 @@ async def update_contracts(args: str):
     await conn.copy_records_to_table("contracts", records=contracts, schema_name="esi")
     await conn.close()
     
-    print(f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}.")
+    LOGGER.info(f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}.")
     return {
         "successful": True,
         "last_updated": last_updated,
@@ -320,7 +322,7 @@ async def update_contracts(args: str):
     }
     
 async def update_contract_items(args: str):
-    print(f"[update_contract_items] Updating contract items for region {args}.")
+    LOGGER.info(f"[update_contract_items] Updating contract items for region {args}.")
     region_id = int(args)
     conn = await connect_to_db()
 
@@ -330,7 +332,7 @@ async def update_contract_items(args: str):
         WHERE ci.contract_id NOT IN (SELECT contract_id FROM esi.contracts);
         """
     )
-    print(f"[update_contract_items] {removed_items} items from contracts that no longer exist")
+    LOGGER.info(f"[update_contract_items] {removed_items} items from contracts that no longer exist")
 
     contracts = await conn.fetch(
         """
@@ -343,7 +345,7 @@ async def update_contract_items(args: str):
         """,
         region_id,
     )
-    print(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
+    LOGGER.info(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
     incomplete_contracts = 0
     
     contract_item_lists = [gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")) for contract in contracts]
@@ -378,11 +380,11 @@ async def update_contract_items(args: str):
                 contract_items,
             )
         except Exception as e:
-            print(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
-            print(e)
+            LOGGER.error(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
+            LOGGER.error(e)
             incomplete_contracts += 1
             
-    print(f"[update_contract_items] Finished retrieving items for {len(contracts) - incomplete_contracts}/{len(contracts)} contracts.")
+    LOGGER.info(f"[update_contract_items] Finished retrieving items for {len(contracts) - incomplete_contracts}/{len(contracts)} contracts.")
     contract_expiry = await conn.fetchrow(
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contracts'",
         args,
