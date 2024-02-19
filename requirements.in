@@ -2,4 +2,6 @@ fastapi
 uvicorn[standard]
 requests
 asyncpg
-grequests
+asyncio
+httpcore==0.18.0
+httpx==0.25.0

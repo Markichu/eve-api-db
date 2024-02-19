@@ -1,13 +1,15 @@
 import grequests
 import winsound
 import logging
+import time
+import asyncio
 from uvicorn.logging import ColourizedFormatter
 
 from collections import defaultdict
 from decimal import Decimal
 from datetime import datetime, timedelta
 from fastapi import FastAPI
-from src.util import connect_to_db, esi_call, esi_call_itemwise
+from src.util import connect_to_db, esi_call, esi_call_itemwise, gather_generator
 from src.tasks import (
     update_market_orders,
     update_contracts,
@@ -183,6 +185,30 @@ async def test(rep_yield: float = 0.55, tax: float = 0.036, roi: float = 0.05):
     return
 
 
+@app.get("/test_requests")
+async def test_requests():
+    conn = await connect_to_db()
+    
+    contract_ids = await conn.fetch("SELECT contract_id FROM esi.contracts LIMIT 100")
+    
+    start_time = time.perf_counter()
+    
+    # testing time to request items of these 10 contracts
+    contract_item_lists = [gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")) for contract in contract_ids]
+    contract_item_lists = await asyncio.gather(*contract_item_lists)
+    
+    time_taken = time.perf_counter() - start_time
+    
+    # # test with a_esi_call
+    # contract_item_lists = [gather_generator(a_esi_call(f"/contracts/public/items/{contract['contract_id']}")) for contract in contract_ids]
+    # contract_item_lists = await asyncio.gather(*contract_item_lists)
+    
+    # time_taken = time.perf_counter() - start_time
+    
+    return {
+        "time_taken": time_taken
+    }
+
 # TODO: Fix this and turn it into a functioning recurring task
 @app.post("/update_market_history")
 async def update_market_history(args: str):
@@ -266,19 +292,19 @@ async def update_tasks():
         # check if task needs to be updated
         if task["expiry"] > datetime.utcnow():
             continue
-        try:
-            result = await TASKS[task["task_name"]](task["task_params"])
-        except Exception as e:
-            print(f"Failed to update {task['task_name']} with params {task['task_params']}")
-            print(e)
-            task_status.append(
-                {
-                    "task_name": task["task_name"],
-                    "task_params": task["task_params"],
-                    "successful": False,
-                }
-            )
-            continue
+        # try:
+        result = await TASKS[task["task_name"]](task["task_params"])
+        # except Exception as e:
+        #     print(f"Failed to update {task['task_name']} with params {task['task_params']}")
+        #     print(e)
+        #     task_status.append(
+        #         {
+        #             "task_name": task["task_name"],
+        #             "task_params": task["task_params"],
+        #             "successful": False,
+        #         }
+        #     )
+        #     continue
 
         if result["successful"]:
             task_status.append(

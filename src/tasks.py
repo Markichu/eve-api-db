@@ -8,6 +8,7 @@ from collections import defaultdict
 
 LOGGER = logging.getLogger("uvicorn.access")
 
+
 async def aggregate_market_orders(args: str):
     LOGGER.info(f"[aggregate_market_orders] Aggregating orders for region {args}.")
     region_id = int(args)
@@ -52,12 +53,12 @@ async def aggregate_market_orders(args: str):
         "last_updated": market_updated[0]["last_updated"],
         "expiry": market_updated[0]["expiry"],
     }
-    
+
 
 async def aggregate_bp_contracts(args: str):
     LOGGER.info(f"[aggregate_bp_contracts] Aggregating BP contracts for region {args}.")
     region_id = int(args)
-    
+
     conn = await connect_to_db()
     contracts_updated = await conn.fetchrow(
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contract_items'",
@@ -67,10 +68,10 @@ async def aggregate_bp_contracts(args: str):
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'market.bp_contracts'",
         args,
     )
-    
+
     if contracts_updated["last_updated"] <= agg_updated["last_updated"]:
         return {"successful": False, "reason": "No new contract items to aggregate."}
-    
+
     contracts_data = await conn.fetch(
         """
         SELECT *
@@ -86,11 +87,11 @@ async def aggregate_bp_contracts(args: str):
         """
     )
     contract_items = defaultdict(list)
-    
+
     # add associated items for each contract to dict
     for contract_item in contract_items_data:
         contract_items[contract_item["contract_id"]].append(contract_item)
-    
+
     bp_contracts = []
     # collect all contracts that are bpo or bpc
     for contract in contracts_data:
@@ -103,7 +104,7 @@ async def aggregate_bp_contracts(args: str):
             continue
         if contract_item["material_efficiency"] == None:
             continue
-        
+
         bp_contracts.append(
             (
                 contract["contract_id"],
@@ -116,7 +117,7 @@ async def aggregate_bp_contracts(args: str):
                 contract_item["runs"],
             )
         )
-    
+
     await conn.execute("DELETE FROM market.bp_contracts WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("bp_contracts", records=bp_contracts, schema_name="market")
     await conn.close()
@@ -274,12 +275,12 @@ async def update_market_orders(args: str):
         "last_updated": datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
         "expiry": datetime.strptime(response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"),
     }
-    
+
 
 async def update_contracts(args: str):
     LOGGER.info(f"[update_contracts] Updating contracts for region {args}.")
     region_id = int(args)
-    
+
     last_updated = datetime.utcnow()
     data_expiry = datetime.utcnow() + timedelta(hours=1)
     contracts = []
@@ -288,39 +289,42 @@ async def update_contracts(args: str):
             last_updated = datetime.strptime(item["last-modified"], "%a, %d %b %Y %H:%M:%S %Z")
             data_expiry = datetime.strptime(item["expires"], "%a, %d %b %Y %H:%M:%S %Z")
             continue
-        
-        contracts.append((
-            item["contract_id"],
-            datetime.strptime(item["date_issued"], "%Y-%m-%dT%H:%M:%SZ"),
-            datetime.strptime(item["date_expired"], "%Y-%m-%dT%H:%M:%SZ"),
-            item["issuer_id"],
-            item["issuer_corporation_id"],
-            item.get("for_corporation", False),
-            item["type"],
-            item["start_location_id"],
-            item["end_location_id"],
-            region_id,
-            item.get("collateral", None),
-            item["reward"],
-            item.get("buyout", None),
-            item["days_to_complete"],
-            item["price"],
-            item["title"],
-            item["volume"],
-        ))
-        
+
+        contracts.append(
+            (
+                item["contract_id"],
+                datetime.strptime(item["date_issued"], "%Y-%m-%dT%H:%M:%SZ"),
+                datetime.strptime(item["date_expired"], "%Y-%m-%dT%H:%M:%SZ"),
+                item["issuer_id"],
+                item["issuer_corporation_id"],
+                item.get("for_corporation", False),
+                item["type"],
+                item["start_location_id"],
+                item["end_location_id"],
+                region_id,
+                item.get("collateral", None),
+                item["reward"],
+                item.get("buyout", None),
+                item["days_to_complete"],
+                item["price"],
+                item["title"],
+                item["volume"],
+            )
+        )
+
     conn = await connect_to_db()
     await conn.execute("DELETE FROM esi.contracts WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("contracts", records=contracts, schema_name="esi")
     await conn.close()
-    
+
     LOGGER.info(f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}.")
     return {
         "successful": True,
         "last_updated": last_updated,
         "expiry": data_expiry,
     }
-    
+
+
 async def update_contract_items(args: str):
     LOGGER.info(f"[update_contract_items] Updating contract items for region {args}.")
     region_id = int(args)
@@ -347,8 +351,11 @@ async def update_contract_items(args: str):
     )
     LOGGER.info(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
     incomplete_contracts = 0
-    
-    contract_item_lists = [gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")) for contract in contracts]
+
+    contract_item_lists = [
+        gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}"))
+        for contract in contracts
+    ]
     contract_item_lists = await asyncio.gather(*contract_item_lists)
 
     for contract, item_list in zip(contracts, contract_item_lists):
@@ -383,16 +390,22 @@ async def update_contract_items(args: str):
             LOGGER.error(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
             LOGGER.error(e)
             incomplete_contracts += 1
-            
-    LOGGER.info(f"[update_contract_items] Finished retrieving items for {len(contracts) - incomplete_contracts}/{len(contracts)} contracts.")
+
+    LOGGER.info(
+        f"[update_contract_items] Finished retrieving items for {len(contracts) - incomplete_contracts}/{len(contracts)} contracts."
+    )
     contract_expiry = await conn.fetchrow(
         "SELECT * FROM db_management.last_updated WHERE task_params = $1 AND task_name = 'esi.contracts'",
         args,
     )
-    
+
     await conn.close()
     return {
         "successful": True,
         "last_updated": datetime.utcnow(),
-        "expiry": min(datetime.utcnow() + timedelta(minutes=5), contract_expiry["expiry"]) if incomplete_contracts > 0 else contract_expiry["expiry"]
+        "expiry": (
+            min(datetime.utcnow() + timedelta(minutes=5), contract_expiry["expiry"])
+            if incomplete_contracts > 0
+            else contract_expiry["expiry"]
+        ),
     }
