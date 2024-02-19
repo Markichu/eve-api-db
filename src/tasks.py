@@ -47,7 +47,9 @@ async def aggregate_market_orders(args: str):
     await conn.execute("DELETE FROM market.aggregates WHERE region_id = $1", region_id)
     await conn.copy_records_to_table("aggregates", records=aggs, schema_name="market")
 
-    LOGGER.info(f"[aggregate_market_orders] Aggregated {len(aggs)} orders for region {args}.")
+    LOGGER.info(
+        f"[aggregate_market_orders] Aggregated {len(aggs)} orders for region {args}."
+    )
     return {
         "successful": True,
         "last_updated": market_updated[0]["last_updated"],
@@ -100,9 +102,9 @@ async def aggregate_bp_contracts(args: str):
         if len(contract_items[contract["contract_id"]]) != 1:
             continue
         contract_item = contract_items[contract["contract_id"]][0]
-        if contract_item["is_included"] == False:
+        if contract_item["is_included"] is False:
             continue
-        if contract_item["material_efficiency"] == None:
+        if contract_item["material_efficiency"] is None:
             continue
 
         bp_contracts.append(
@@ -118,10 +120,16 @@ async def aggregate_bp_contracts(args: str):
             )
         )
 
-    await conn.execute("DELETE FROM market.bp_contracts WHERE region_id = $1", region_id)
-    await conn.copy_records_to_table("bp_contracts", records=bp_contracts, schema_name="market")
+    await conn.execute(
+        "DELETE FROM market.bp_contracts WHERE region_id = $1", region_id
+    )
+    await conn.copy_records_to_table(
+        "bp_contracts", records=bp_contracts, schema_name="market"
+    )
     await conn.close()
-    LOGGER.info(f"[aggregate_bp_contracts] Aggregated {len(bp_contracts)} BP contracts for region {args}.")
+    LOGGER.info(
+        f"[aggregate_bp_contracts] Aggregated {len(bp_contracts)} BP contracts for region {args}."
+    )
     return {
         "successful": True,
         "last_updated": contracts_updated["last_updated"],
@@ -155,7 +163,7 @@ async def calculate_manufacture_price(args: str):
 
     bp_materials = await conn.fetch(
         """
-        SELECT blueprint_type_id, material_type_id, quantity 
+        SELECT blueprint_type_id, material_type_id, quantity
         FROM sde.blueprint_materials bpm
         JOIN sde.type_ids ti ON bpm.material_type_id = ti.type_id
         WHERE activity = 'manufacturing'
@@ -169,9 +177,14 @@ async def calculate_manufacture_price(args: str):
             continue
         bp_cost[blueprint_type_id] += quantity * sell_prices[material_type_id]
 
-    manufacture = [(bp_type_id, manufacture_cost) for bp_type_id, manufacture_cost in bp_cost.items()]
+    manufacture = [
+        (bp_type_id, manufacture_cost)
+        for bp_type_id, manufacture_cost in bp_cost.items()
+    ]
     await conn.execute("TRUNCATE TABLE market.manufacture")
-    await conn.copy_records_to_table("manufacture", records=manufacture, schema_name="market")
+    await conn.copy_records_to_table(
+        "manufacture", records=manufacture, schema_name="market"
+    )
 
     return {
         "successful": True,
@@ -222,7 +235,9 @@ async def calculate_reprocess_price(args: str):
     )
 
     await conn.execute("TRUNCATE TABLE market.reprocess")
-    await conn.copy_records_to_table("reprocess", records=reprocess, schema_name="market")
+    await conn.copy_records_to_table(
+        "reprocess", records=reprocess, schema_name="market"
+    )
 
     return {
         "successful": True,
@@ -269,11 +284,17 @@ async def update_market_orders(args: str):
     await conn.copy_records_to_table("market_orders", records=orders, schema_name="esi")
     await conn.close()
 
-    LOGGER.info(f"[update_market_orders] Updated {len(orders)} orders for region {args}.")
+    LOGGER.info(
+        f"[update_market_orders] Updated {len(orders)} orders for region {args}."
+    )
     return {
         "successful": True,
-        "last_updated": datetime.strptime(response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"),
-        "expiry": datetime.strptime(response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"),
+        "last_updated": datetime.strptime(
+            response.headers["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"
+        ),
+        "expiry": datetime.strptime(
+            response.headers["expires"], "%a, %d %b %Y %H:%M:%S %Z"
+        ),
     }
 
 
@@ -286,7 +307,9 @@ async def update_contracts(args: str):
     contracts = []
     async for item in esi_call_itemwise(f"/contracts/public/{region_id}/"):
         if item.get("is_headers", False):
-            last_updated = datetime.strptime(item["last-modified"], "%a, %d %b %Y %H:%M:%S %Z")
+            last_updated = datetime.strptime(
+                item["last-modified"], "%a, %d %b %Y %H:%M:%S %Z"
+            )
             data_expiry = datetime.strptime(item["expires"], "%a, %d %b %Y %H:%M:%S %Z")
             continue
 
@@ -317,7 +340,9 @@ async def update_contracts(args: str):
     await conn.copy_records_to_table("contracts", records=contracts, schema_name="esi")
     await conn.close()
 
-    LOGGER.info(f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}.")
+    LOGGER.info(
+        f"[update_contracts] Updated {len(contracts)} contracts for region {region_id}."
+    )
     return {
         "successful": True,
         "last_updated": last_updated,
@@ -336,24 +361,30 @@ async def update_contract_items(args: str):
         WHERE ci.contract_id NOT IN (SELECT contract_id FROM esi.contracts);
         """
     )
-    LOGGER.info(f"[update_contract_items] {removed_items} items from contracts that no longer exist")
+    LOGGER.info(
+        f"[update_contract_items] {removed_items} items from contracts that no longer exist"
+    )
 
     contracts = await conn.fetch(
         """
         SELECT c.contract_id
         FROM esi.contracts c
         LEFT JOIN esi.contract_items ci USING (contract_id)
-        WHERE ci.record_id IS NULL 
+        WHERE ci.record_id IS NULL
         AND c.type IN ('item_exchange', 'auction')
         AND c.region_id = $1;
         """,
         region_id,
     )
-    LOGGER.info(f"[update_contract_items] Found {len(contracts)} contracts with missing items")
+    LOGGER.info(
+        f"[update_contract_items] Found {len(contracts)} contracts with missing items"
+    )
     incomplete_contracts = 0
 
     contract_item_lists = [
-        gather_generator(esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}"))
+        gather_generator(
+            esi_call_itemwise(f"/contracts/public/items/{contract['contract_id']}")
+        )
         for contract in contracts
     ]
     contract_item_lists = await asyncio.gather(*contract_item_lists)
@@ -381,13 +412,26 @@ async def update_contract_items(args: str):
 
             await conn.executemany(
                 """
-                INSERT INTO esi.contract_items (contract_id, record_id, type_id, quantity, is_included, item_id, is_blueprint_copy, material_efficiency, time_efficiency, runs)
+                INSERT INTO esi.contract_items (
+                    contract_id,
+                    record_id,
+                    type_id,
+                    quantity,
+                    is_included,
+                    item_id,
+                    is_blueprint_copy,
+                    material_efficiency,
+                    time_efficiency,
+                    runs
+                )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 contract_items,
             )
         except Exception as e:
-            LOGGER.error(f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}")
+            LOGGER.error(
+                f"[update_contract_items] Failed to retrieve items for contract {contract['contract_id']}"
+            )
             LOGGER.error(e)
             incomplete_contracts += 1
 

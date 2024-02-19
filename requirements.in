@@ -3,5 +3,6 @@ uvicorn[standard]
 requests
 asyncpg
 asyncio
+pre-commit
 httpcore==0.18.0
 httpx==0.25.0
